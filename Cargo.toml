@@ -1,0 +1,18 @@
+[package]
+authors = ["Hayato Ito <hayato@google.com>"]
+edition = "2018"
+name = "brainfuck"
+version = "0.1.0"
+[[bench]]
+harness = false
+name = "brainfuck_bench"
+
+[dependencies]
+criterion = "0.2.5"
+failure = "0.1.2"
+glob = "0.2.11"
+loggerv = "0.7.1"
+serde = "1.0.79"
+serde_derive = "1.0.79"
+serde_json = "1.0.31"
+structopt = "0.2.10"
