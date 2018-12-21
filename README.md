@@ -11,7 +11,7 @@ USAGE:
 
 FLAGS:
     -h, --help       Prints help information
-    -j, --jit        Use jit compilation
+    -j, --jit        Use JIT (Just-in-time) compilation (linux x86-64 only)
     -V, --version    Prints version information
     -v, --Verbose    verbose level
 
