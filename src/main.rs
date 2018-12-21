@@ -6,10 +6,26 @@ type Result<T> = std::result::Result<T, failure::Error>;
 
 #[derive(StructOpt, Debug)]
 struct Opt {
-    #[structopt(short = "v", parse(from_occurrences))]
+    #[structopt(
+        short = "v",
+        long = "Verbose",
+        parse(from_occurrences),
+        help = "verbose level"
+    )]
     verbose: u64,
-    #[structopt(short = "i", long = "inteerpreter")]
-    interpreter: Option<u64>,
+    #[structopt(
+        short = "o",
+        long = "optimize",
+        help = "Optimization level (1-3)",
+        conflicts_with = "jit"
+    )]
+    optimize: Option<u64>,
+    #[structopt(
+        short = "j",
+        long = "jit",
+        help = "Use JIT (Just-in-time) compilation (linux x86-64 only)"
+    )]
+    jit: bool,
     program: String,
 }
 
@@ -22,21 +38,5 @@ fn main() -> Result<()> {
     let stdin = std::io::stdin();
     let stdin = stdin.lock();
     let stdout = std::io::stdout();
-    let stdout = stdout.lock();
-    if let Some(i) = opt.interpreter {
-        if i == 1 {
-            brainfuck::run1(&buffer, stdin, stdout)?;
-        } else if i == 2 {
-            brainfuck::run2(&buffer, stdin, stdout)?;
-        } else if i == 3 {
-            brainfuck::run3(&buffer, stdin, stdout)?;
-        } else if i == 4 {
-            brainfuck::run_jit1(&buffer, stdin, stdout)?;
-        } else {
-            unreachable!()
-        }
-    } else {
-        brainfuck::run(&buffer, stdin, stdout)?;
-    }
-    Ok(())
+    brainfuck::run(&buffer, stdin, stdout, opt.optimize, opt.jit)
 }

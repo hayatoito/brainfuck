@@ -9,7 +9,7 @@ use mmap;
 
 type Result<T> = std::result::Result<T, failure::Error>;
 
-pub trait Program {
+pub trait Brainfuck {
     fn new(s: &[u8]) -> Self;
     // fn run(&self, read: impl Read, mut write: impl Write) -> Result<()>;
     fn run(&self, read: impl Read, write: impl Write) -> Result<()>;
@@ -25,11 +25,11 @@ fn filter_instructions(s: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-struct Program1 {
+struct Interpreter1 {
     instructions: Vec<u8>,
 }
 
-impl Program1 {
+impl Interpreter1 {
     fn create_jumptable(&self) -> Vec<usize> {
         let mut pc = 0;
         let program_size = self.instructions.len();
@@ -58,9 +58,9 @@ impl Program1 {
     }
 }
 
-impl Program for Program1 {
-    fn new(s: &[u8]) -> Program1 {
-        Program1 {
+impl Brainfuck for Interpreter1 {
+    fn new(s: &[u8]) -> Interpreter1 {
+        Interpreter1 {
             instructions: filter_instructions(s),
         }
     }
@@ -108,9 +108,8 @@ impl Program for Program1 {
     }
 }
 
-// [2018-12-18 Tue] Optimized interpreter Part 1 - take 2
+// Optimized interpreter Part 1 - take 2
 enum Op {
-    // Invalid,
     // For take 2
     IncPtr(usize),
     DecPtr(usize),
@@ -191,15 +190,15 @@ fn translate_program(instructions: &[u8], do_optimize_loop: bool) -> Vec<Op> {
     ops
 }
 
-struct Program2 {
+struct Interpreter2 {
     ops: Vec<Op>,
 }
 
-impl Program for Program2 {
-    fn new(s: &[u8]) -> Program2 {
+impl Brainfuck for Interpreter2 {
+    fn new(s: &[u8]) -> Interpreter2 {
         let instructions = filter_instructions(s);
         let ops = translate_program(&instructions, false);
-        Program2 { ops }
+        Interpreter2 { ops }
     }
     fn run(&self, read: impl Read, mut write: impl Write) -> Result<()> {
         let mut memory: Vec<u8> = vec![0; 30000];
@@ -244,10 +243,6 @@ impl Program for Program2 {
     }
 }
 
-// [2018-12-19 Wed] Improvements: (on hayato-macbookpro)
-// cargo run --release -- -i 1 ./benches/brainfuck/mandelbrot.bf  21.07s user 0.53s system 84% cpu 25.428 total
-// cargo run --release -- -i 2 ./benches/brainfuck/mandelbrot.bf  7.81s user 0.33s system 81% cpu 9.964 total
-
 // Optimized interpreter Part 1 - take 3
 
 // See https://github.com/eliben/code-for-blog/blob/master/2017/bfjit/optinterp3.cpp
@@ -283,15 +278,15 @@ fn optimize_loop(ops: &[Op], loop_start: usize) -> Option<Op> {
     }
 }
 
-struct Program3 {
+struct Interpreter3 {
     ops: Vec<Op>,
 }
 
-impl Program for Program3 {
-    fn new(s: &[u8]) -> Program3 {
+impl Brainfuck for Interpreter3 {
+    fn new(s: &[u8]) -> Interpreter3 {
         let instructions = filter_instructions(s);
         let ops = translate_program(&instructions, true);
-        Program3 { ops }
+        Interpreter3 { ops }
     }
     fn run(&self, read: impl Read, mut write: impl Write) -> Result<()> {
         let mut memory: Vec<u8> = vec![0; 300000];
@@ -512,15 +507,13 @@ fn simple_jit(instructions: &[u8]) {
     debug!("jit: size: {}", emitter.size());
     let func: fn() = unsafe { std::mem::transmute(mapping.data()) };
     func();
-    // let func: fn(*const u8) = unsafe { std::mem::transmute(mapping.data()) };
-    // func(std::ptr::null());
 }
 
 struct Jit1 {
     instructions: Vec<u8>,
 }
 
-impl Program for Jit1 {
+impl Brainfuck for Jit1 {
     fn new(s: &[u8]) -> Jit1 {
         let instructions = filter_instructions(s);
         Jit1 { instructions }
@@ -532,24 +525,30 @@ impl Program for Jit1 {
     }
 }
 
-pub fn run<R: Read, W: Write>(s: &[u8], r: R, w: W) -> Result<()> {
-    Program2::new(s).run(r, w)
+pub fn run_default<R: Read, W: Write>(s: &[u8], r: R, w: W) -> Result<()> {
+    Interpreter1::new(s).run(r, w)
 }
 
-pub fn run1<R: Read, W: Write>(s: &[u8], r: R, w: W) -> Result<()> {
-    Program1::new(s).run(r, w)
-}
-
-pub fn run2<R: Read, W: Write>(s: &[u8], r: R, w: W) -> Result<()> {
-    Program2::new(s).run(r, w)
-}
-
-pub fn run3<R: Read, W: Write>(s: &[u8], r: R, w: W) -> Result<()> {
-    Program3::new(s).run(r, w)
-}
-
-pub fn run_jit1<R: Read, W: Write>(s: &[u8], r: R, w: W) -> Result<()> {
-    Jit1::new(s).run(r, w)
+pub fn run<R: Read, W: Write>(
+    s: &[u8],
+    r: R,
+    w: W,
+    optimize: Option<u64>,
+    jit: bool,
+) -> Result<()> {
+    if jit {
+        Jit1::new(s).run(r, w)
+    } else if let Some(o) = optimize {
+        match o {
+            1 => Interpreter1::new(s).run(r, w),
+            2 => Interpreter2::new(s).run(r, w),
+            3 => Interpreter3::new(s).run(r, w),
+            _ => unimplemented!(),
+        }
+    } else {
+        // TODO: Fix the default
+        run_default(s, r, w)
+    }
 }
 
 #[cfg(test)]
@@ -562,7 +561,7 @@ mod tests {
     #[test]
     fn simple_test() {
         let mut out = Vec::new();
-        run(b"", &[] as &[u8], &mut out).unwrap();
+        run_default(b"", &[] as &[u8], &mut out).unwrap();
         assert_eq!(out, b"");
 
         let s = br"
@@ -571,7 +570,7 @@ mod tests {
 [<+.>-]
 ";
         let mut out = Vec::new();
-        run(s, &[] as &[u8], &mut out).unwrap();
+        run_default(s, &[] as &[u8], &mut out).unwrap();
         assert_eq!(out, b"12345");
     }
 
@@ -590,7 +589,7 @@ mod tests {
         expect_out: String,
     }
 
-    fn assert_program_output<P: Program>(s: &[u8], stdin: &[u8], expected_output: &[u8]) {
+    fn assert_program_output<P: Brainfuck>(s: &[u8], stdin: &[u8], expected_output: &[u8]) {
         let mut out = Vec::new();
         P::new(s).run(stdin, &mut out).unwrap();
         assert_eq!(out, expected_output);
@@ -614,9 +613,9 @@ mod tests {
                 let stdin = expected.feed_in.as_bytes();
                 let expected_output = expected.expect_out.as_bytes();
 
-                assert_program_output::<Program1>(bf, stdin, expected_output);
-                assert_program_output::<Program2>(bf, stdin, expected_output);
-                assert_program_output::<Program3>(bf, stdin, expected_output);
+                assert_program_output::<Interpreter1>(bf, stdin, expected_output);
+                assert_program_output::<Interpreter2>(bf, stdin, expected_output);
+                assert_program_output::<Interpreter3>(bf, stdin, expected_output);
             })
             .count();
         assert!(
